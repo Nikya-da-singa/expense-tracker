@@ -1,31 +1,20 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import os
 
 # =========================
 # CONFIG
 # =========================
 st.set_page_config(page_title="Expense Tracker", layout="wide")
-FILE_PATH = "expenses.csv"
 
 # =========================
-# FUNCTIONS
+# SESSION STATE (PRIVATE DATA)
 # =========================
-def load_data():
-    if not os.path.exists(FILE_PATH):
-        df = pd.DataFrame(columns=["Date", "Category", "Amount", "Description"])
-        df.to_csv(FILE_PATH, index=False)
-    df = pd.read_csv(FILE_PATH)
-    if not df.empty:
-        df["Date"] = pd.to_datetime(df["Date"])
-    return df
+if "expenses" not in st.session_state:
+    st.session_state.expenses = pd.DataFrame(
+        columns=["Date", "Category", "Amount", "Description"]
+    )
 
-def save_data(df):
-    df.to_csv(FILE_PATH, index=False)
-
-# Load data
-df = load_data()
+df = st.session_state.expenses
 
 st.title("💰 Smart Expense Tracker")
 st.markdown("---")
@@ -80,10 +69,14 @@ elif menu == "Add Expense":
             "Description": [description]
         })
 
-        new_data.to_csv(FILE_PATH, mode='a', header=False, index=False)
+        st.session_state.expenses = pd.concat(
+            [st.session_state.expenses, new_data],
+            ignore_index=True
+        )
 
         st.success("✅ Expense Added!")
         st.rerun()
+
 # =========================
 # MANAGE EXPENSES
 # =========================
@@ -111,8 +104,7 @@ elif menu == "Manage Expenses":
         selected = st.selectbox("Select index", df.index)
 
         if st.button("Delete"):
-            df = df.drop(selected)
-            save_data(df)
+            st.session_state.expenses = df.drop(selected).reset_index(drop=True)
             st.success("Deleted!")
             st.rerun()
 
@@ -132,6 +124,8 @@ elif menu == "Analytics":
     if df.empty:
         st.warning("No data available")
     else:
+        import matplotlib.pyplot as plt
+
         # Category-wise
         category_total = df.groupby("Category")["Amount"].sum()
 
@@ -140,9 +134,12 @@ elif menu == "Analytics":
 
         # Pie Chart
         st.write("🥧 Distribution")
-        st.pyplot(category_total.plot.pie(autopct='%1.1f%%').figure)
+        fig, ax = plt.subplots()
+        ax.pie(category_total, labels=category_total.index, autopct='%1.1f%%')
+        st.pyplot(fig)
 
         # Monthly trend
+        df["Date"] = pd.to_datetime(df["Date"])
         df["Month"] = df["Date"].dt.to_period("M")
         monthly = df.groupby("Month")["Amount"].sum()
 
